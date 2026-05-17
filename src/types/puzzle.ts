@@ -20,6 +20,12 @@ export interface Puzzle {
   };
   difficulty: "easy" | "medium" | "hard";
   sourceUrl: string;
+  /** CC attribution string — required if image is not owned by us */
+  imageAttribution?: string;
+  /** License identifier: "CC BY", "CC BY-SA", "CC0", "AI-GENERATED", "OWNED", etc. */
+  imageLicense?: string;
+  /** URL of the original image source (photographer page / Flickr / Wikimedia) */
+  imageSourceUrl?: string;
 }
 
 export interface GuessState {
