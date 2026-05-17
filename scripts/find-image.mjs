@@ -1,184 +1,261 @@
 #!/usr/bin/env node
 /**
- * BolGuessr image finder — searches Openverse for CC-licensed, commercially usable images.
+ * BolGuessr image finder
+ *
+ * Searches two sources for commercially-usable football images:
+ *   1. Wikimedia Commons — best for specific players/matches/stadiums
+ *   2. Openverse        — broader search across Flickr + many others
  *
  * Usage:
- *   node scripts/find-image.mjs "van persie header spain 2014" 2026-05-18
- *   node scripts/find-image.mjs "grealish birmingham aston villa" 2026-05-10
+ *   node scripts/find-image.mjs "search terms" [YYYY-MM-DD]
  *
- * What it does:
- *   1. Queries Openverse API (searches Flickr, Wikimedia Commons, etc.)
- *   2. Filters to commercial-use licenses only (CC BY, CC BY-SA, CC0, PD)
- *   3. Displays results with license, dimensions, creator, URL
- *   4. Lets you pick one to download straight to public/images/puzzles/
- *   5. Prints the attribution string to paste into puzzles.ts
+ * Examples:
+ *   node scripts/find-image.mjs "jack grealish aston villa" 2026-05-10
+ *   node scripts/find-image.mjs "stamford bridge stadium" 2026-05-12
+ *   node scripts/find-image.mjs "robin van persie header" 2026-05-18
+ *   node scripts/find-image.mjs "azteca stadium mexico"
  *
- * License key:
- *   cc0      = Public Domain / no restrictions
- *   pdm      = Public Domain Mark
- *   by       = CC BY (attribution required)
- *   by-sa    = CC BY-SA (attribution + share-alike)
- *   by-nc    = ⚠ Non-commercial only — DO NOT USE WITH ADS
- *   by-nc-sa = ⚠ Non-commercial only — DO NOT USE WITH ADS
+ * What happens:
+ *   - Results from both sources are merged and displayed
+ *   - Non-commercial licenses (BY-NC etc.) are flagged red — DO NOT USE with ads
+ *   - Pick a number → image downloaded to public/images/puzzles/YYYY-MM-DD.ext
+ *     (or just printed if no date given, for manual save)
+ *   - Attribution string printed — paste into puzzles.ts
+ *
+ * Hotlinking option:
+ *   If you'd rather hotlink than download, note the URL from the results.
+ *   Wikimedia URLs are stable (content-addressed). Flickr URLs can break.
+ *   Either way you must show attribution — see imageAttribution field in puzzles.ts.
+ *
+ * License guide:
+ *   CC0 / PD     = public domain, no restrictions  ✅
+ *   CC BY        = attribution required             ✅ commercial ok
+ *   CC BY-SA     = attribution + share-alike        ✅ commercial ok
+ *   CC BY-NC     = NON-COMMERCIAL ONLY              ❌ don't use with ads
+ *   CC BY-NC-SA  = NON-COMMERCIAL ONLY              ❌ don't use with ads
+ *   CC BY-ND     = no derivatives                   ⚠ technically ok but check
  */
 
 import https from "node:https";
-import fs from "node:fs";
-import path from "node:path";
+import http  from "node:http";
+import fs    from "node:fs";
+import path  from "node:path";
 import readline from "node:readline";
 
-// ── Config ────────────────────────────────────────────────────────────────────
-
-const OPENVERSE_API = "https://api.openverse.org/v1/images/";
-const OUTPUT_DIR    = path.resolve("public/images/puzzles");
-const PAGE_SIZE     = 12;
-
-// Only include licenses safe for commercial use (ad-supported site)
-const COMMERCIAL_SAFE = ["cc0", "pdm", "by", "by-sa"];
-
-// ── CLI args ──────────────────────────────────────────────────────────────────
-
-const [, , query, puzzleDate] = process.argv;
+const OUTPUT_DIR = path.resolve("public/images/puzzles");
+const [,, query, puzzleDate] = process.argv;
 
 if (!query) {
   console.error("\nUsage: node scripts/find-image.mjs \"search terms\" [YYYY-MM-DD]\n");
-  console.error("Example: node scripts/find-image.mjs \"van persie header spain 2014\" 2026-05-18\n");
   process.exit(1);
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── HTTP helpers ──────────────────────────────────────────────────────────────
 
-function httpsGet(url) {
+function get(url) {
   return new Promise((resolve, reject) => {
-    https.get(url, { headers: { "User-Agent": "BolGuessr/1.0" } }, (res) => {
+    const mod = url.startsWith("https") ? https : http;
+    mod.get(url, { headers: { "User-Agent": "BolGuessr/1.0 (bolguessr.com)" } }, (res) => {
+      if (res.statusCode === 301 || res.statusCode === 302) {
+        return get(res.headers.location).then(resolve).catch(reject);
+      }
       let data = "";
-      res.on("data", (c) => (data += c));
+      res.on("data", c => data += c);
       res.on("end", () => {
         try { resolve(JSON.parse(data)); }
-        catch (e) { reject(new Error("Failed to parse JSON: " + data.slice(0, 200))); }
+        catch { reject(new Error("JSON parse failed: " + data.slice(0, 100))); }
       });
     }).on("error", reject);
   });
 }
 
-function downloadFile(url, destPath) {
+function download(url, dest) {
   return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(destPath);
-    https.get(url, { headers: { "User-Agent": "BolGuessr/1.0" } }, (res) => {
-      // Follow redirects (Openverse thumbnails sometimes redirect)
+    const mod = url.startsWith("https") ? https : http;
+    const file = fs.createWriteStream(dest);
+    mod.get(url, { headers: { "User-Agent": "BolGuessr/1.0" } }, (res) => {
       if (res.statusCode === 301 || res.statusCode === 302) {
-        file.close();
-        fs.unlinkSync(destPath);
-        downloadFile(res.headers.location, destPath).then(resolve).catch(reject);
-        return;
+        file.close(); fs.unlinkSync(dest);
+        return download(res.headers.location, dest).then(resolve).catch(reject);
       }
       res.pipe(file);
       file.on("finish", () => { file.close(); resolve(); });
-    }).on("error", (err) => {
-      fs.unlink(destPath, () => {});
-      reject(err);
-    });
+    }).on("error", err => { fs.unlink(dest, () => {}); reject(err); });
   });
 }
 
-function licenseLabel(license) {
-  const safe = COMMERCIAL_SAFE.includes(license?.toLowerCase());
-  const tag = license?.toUpperCase() ?? "UNKNOWN";
-  return safe ? `\x1b[32m${tag}\x1b[0m` : `\x1b[31m${tag} ⚠ non-commercial\x1b[0m`;
-}
-
-function prompt(question) {
+function prompt(q) {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise((resolve) => rl.question(question, (ans) => { rl.close(); resolve(ans.trim()); }));
+  return new Promise(r => rl.question(q, a => { rl.close(); r(a.trim()); }));
 }
 
-function extFromUrl(url) {
-  const u = url.split("?")[0];
-  const match = u.match(/\.(jpg|jpeg|png|webp|gif|avif)$/i);
-  return match ? match[0].toLowerCase() : ".jpg";
+function extFrom(url) {
+  const m = url.split("?")[0].match(/\.(jpe?g|png|webp|gif|avif|svg)$/i);
+  return m ? m[0].toLowerCase().replace(".jpeg", ".jpg") : ".jpg";
+}
+
+// ── License logic ─────────────────────────────────────────────────────────────
+
+const COMMERCIAL_SAFE = ["cc0", "pdm", "public domain", "by", "by-sa", "by-nd"];
+const NON_COMMERCIAL  = ["by-nc", "by-nc-sa", "by-nc-nd"];
+
+function licenseStatus(raw = "") {
+  const l = raw.toLowerCase().replace(/\s+/g, "-").replace("cc-", "").replace("cc ", "");
+  if (NON_COMMERCIAL.some(s => l.includes(s))) return "NO";   // not safe
+  if (COMMERCIAL_SAFE.some(s => l.includes(s))) return "OK";
+  return "UNKNOWN";
+}
+
+function licenseTag(raw = "") {
+  const status = licenseStatus(raw);
+  const label = (raw || "UNKNOWN").toUpperCase();
+  if (status === "OK")      return `\x1b[32m${label}\x1b[0m`;
+  if (status === "NO")      return `\x1b[31m${label} ⚠ NON-COMMERCIAL\x1b[0m`;
+  return `\x1b[33m${label} ?\x1b[0m`;
+}
+
+// ── Wikimedia Commons search ──────────────────────────────────────────────────
+
+async function searchWikimedia(query, limit = 8) {
+  const q = encodeURIComponent(query);
+  // Step 1: search for matching file titles
+  const searchUrl = `https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=${q}&srnamespace=6&srlimit=${limit}&format=json`;
+  const searchData = await get(searchUrl);
+  const titles = (searchData?.query?.search ?? []).map(r => r.title);
+  if (!titles.length) return [];
+
+  // Step 2: get image info + license metadata for each title
+  const titlesParam = encodeURIComponent(titles.join("|"));
+  const infoUrl = `https://commons.wikimedia.org/w/api.php?action=query&titles=${titlesParam}&prop=imageinfo&iiprop=url|extmetadata|size&format=json`;
+  const infoData = await get(infoUrl);
+  const pages = infoData?.query?.pages ?? {};
+
+  return Object.values(pages)
+    .filter(p => p.imageinfo)
+    .map(p => {
+      const info = p.imageinfo[0];
+      const meta = info.extmetadata ?? {};
+      const artist = (meta.Artist?.value ?? "").replace(/<[^>]*>/g, "").trim();
+      const license = meta.LicenseShortName?.value ?? meta.License?.value ?? "";
+      const descUrl = `https://commons.wikimedia.org/wiki/${encodeURIComponent(p.title)}`;
+      return {
+        source:      "Wikimedia Commons",
+        title:       p.title.replace(/^File:/, "").replace(/_/g, " ").replace(/\.[a-z]+$/i, ""),
+        url:         info.url,
+        landingUrl:  descUrl,
+        creator:     artist || "unknown",
+        license,
+        width:       info.width,
+        height:      info.height,
+        attribution: meta.Attribution?.value?.replace(/<[^>]*>/g, "").trim()
+          || `"${p.title.replace(/^File:/, "")}" from Wikimedia Commons, licensed ${license}. ${descUrl}`,
+      };
+    });
+}
+
+// ── Openverse search ──────────────────────────────────────────────────────────
+
+async function searchOpenverse(query, limit = 8) {
+  const q = encodeURIComponent(query);
+  const url = `https://api.openverse.org/v1/images/?q=${q}&license_type=commercial&page_size=${limit}&mature=false`;
+  const data = await get(url);
+  return (data?.results ?? []).map(r => ({
+    source:      "Openverse / " + (r.provider ?? "unknown"),
+    title:       r.title ?? "(no title)",
+    url:         r.url,
+    landingUrl:  r.foreign_landing_url,
+    creator:     r.creator ?? "unknown",
+    license:     r.license ? `CC ${r.license.toUpperCase()} ${r.license_version ?? ""}`.trim() : "",
+    width:       r.width,
+    height:      r.height,
+    attribution: r.attribution,
+  }));
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
-  const encoded = encodeURIComponent(query);
-  const apiUrl  = `${OPENVERSE_API}?q=${encoded}&license_type=commercial&page_size=${PAGE_SIZE}&mature=false`;
+  console.log(`\n🔍  Searching for: "${query}"\n`);
 
-  console.log(`\n🔍  Searching Openverse for: "${query}"\n`);
-  console.log(`    (Flickr + Wikimedia Commons + more — commercial-use licenses only)\n`);
+  const [wikiResults, openResults] = await Promise.allSettled([
+    searchWikimedia(query),
+    searchOpenverse(query),
+  ]);
 
-  const data = await httpsGet(apiUrl);
+  const all = [
+    ...(wikiResults.status === "fulfilled" ? wikiResults.value : []),
+    ...(openResults.status === "fulfilled" ? openResults.value : []),
+  ];
 
-  if (!data.results || data.results.length === 0) {
-    console.log("No commercially-usable results found.\n");
-    console.log("Tips:");
-    console.log("  • Try broader search terms (e.g. 'stadium' instead of specific match)");
-    console.log("  • Search for the stadium name instead of the event");
-    console.log("  • Consider AI-generated illustrations for famous moments (see IMAGES.md)\n");
-    process.exit(0);
+  if (!all.length) {
+    console.log("No results found. Try broader terms:\n");
+    console.log('  • Stadium name only: "stamford bridge"');
+    console.log('  • Player name only: "robin van persie"');
+    console.log('  • City + year: "mexico city 1986 football"\n');
+    return;
   }
 
-  console.log(`Found ${data.result_count} results (showing first ${data.results.length}):\n`);
-
-  data.results.forEach((r, i) => {
-    const license = licenseLabel(r.license);
-    const dims    = r.width && r.height ? `${r.width}×${r.height}` : "dims unknown";
-    const creator = r.creator ? `by ${r.creator}` : "";
-    console.log(`  ${String(i + 1).padStart(2)}. [${license}] ${r.title?.slice(0, 55) ?? "(no title)"}`);
-    console.log(`      ${creator}  ${dims}`);
-    console.log(`      ${r.foreign_landing_url}`);
-    console.log(`      Direct: ${r.url}`);
+  console.log(`Found ${all.length} results:\n`);
+  all.forEach((r, i) => {
+    const dims = r.width && r.height ? `${r.width}×${r.height}` : "";
+    console.log(`  ${String(i + 1).padStart(2)}. [${licenseTag(r.license)}] — ${r.source}`);
+    console.log(`      ${r.title.slice(0, 70)}`);
+    console.log(`      by ${r.creator}  ${dims}`);
+    console.log(`      ${r.landingUrl}`);
     console.log();
   });
 
-  const choice = await prompt("Pick a number to download (or press Enter to skip): ");
+  const choice = await prompt('Pick a number to download (Enter to skip, "h" for hotlink info): ');
 
-  if (!choice) {
-    console.log("\nNo image selected. Exiting.\n");
+  if (!choice) { console.log("\nNo image selected.\n"); return; }
+
+  if (choice === "h") {
+    console.log("\n── Hotlinking ──────────────────────────────────────────────────────────────");
+    console.log("You can hotlink any CC-licensed image instead of downloading.");
+    console.log("Wikimedia URLs are stable long-term. Flickr URLs can break.");
+    console.log("Put the URL in imageFile in puzzles.ts, OR download and self-host.");
+    console.log("Either way: show attribution visibly near the image.\n");
     return;
   }
 
   const idx = parseInt(choice, 10) - 1;
-  if (isNaN(idx) || idx < 0 || idx >= data.results.length) {
-    console.error("Invalid selection.\n");
-    process.exit(1);
+  if (isNaN(idx) || idx < 0 || idx >= all.length) { console.error("Invalid.\n"); return; }
+
+  const img = all[idx];
+  const status = licenseStatus(img.license);
+
+  if (status === "NO") {
+    console.log(`\n⚠  This image is ${img.license} — non-commercial only.`);
+    console.log("   You cannot use it on an ad-supported site without a separate license.\n");
+    const ok = await prompt("Download anyway for testing only? (y/N): ");
+    if (ok.toLowerCase() !== "y") return;
   }
 
-  const img = data.results[idx];
-
-  // Determine output path
   let destPath;
   if (puzzleDate) {
-    const ext = extFromUrl(img.url);
-    destPath = path.join(OUTPUT_DIR, `${puzzleDate}${ext}`);
+    destPath = path.join(OUTPUT_DIR, `${puzzleDate}${extFrom(img.url)}`);
   } else {
-    const safeName = (img.title ?? "image").replace(/[^a-z0-9]+/gi, "-").toLowerCase().slice(0, 40);
-    destPath = path.join(OUTPUT_DIR, `${safeName}${extFromUrl(img.url)}`);
+    const safe = img.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase().slice(0, 50);
+    destPath = path.join(OUTPUT_DIR, `${safe}${extFrom(img.url)}`);
   }
 
-  console.log(`\n⬇  Downloading to: ${destPath}\n`);
-
+  console.log(`\n⬇  Downloading → ${destPath}\n`);
   try {
-    await downloadFile(img.url, destPath);
-    console.log("✅  Downloaded!\n");
+    await download(img.url, destPath);
+    console.log("✅  Saved!\n");
   } catch (err) {
-    console.error(`Download failed: ${err.message}`);
-    console.log(`\nManual download URL: ${img.url}\n`);
+    console.error(`   Download failed: ${err.message}`);
+    console.log(`   Manual URL: ${img.url}\n`);
   }
 
-  // Print attribution
-  const attribution = img.attribution ??
-    `"${img.title}" by ${img.creator ?? "unknown"} is licensed under CC ${img.license?.toUpperCase() ?? "BY"} ${img.license_version ?? ""}. ${img.license_url ?? ""}`.trim();
-
+  // Attribution output
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  console.log("📋  Attribution string (paste into puzzles.ts):\n");
-  console.log(`    imageAttribution: "${attribution}",`);
-  console.log(`    imageLicense:     "${img.license?.toUpperCase()}",`);
-  console.log(`    imageSourceUrl:   "${img.foreign_landing_url}",`);
+  console.log("📋  Paste into puzzles.ts:\n");
+  console.log(`    imageAttribution: ${JSON.stringify(img.attribution)},`);
+  console.log(`    imageLicense:     ${JSON.stringify(img.license)},`);
+  console.log(`    imageSourceUrl:   ${JSON.stringify(img.landingUrl)},`);
+  console.log("\n    Also add to public/images/puzzles/ if not already downloaded.");
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 }
 
-main().catch((err) => {
-  console.error("Error:", err.message);
-  process.exit(1);
-});
+main().catch(err => { console.error("Error:", err.message); process.exit(1); });

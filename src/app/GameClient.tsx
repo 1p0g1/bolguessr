@@ -106,6 +106,24 @@ export default function GameClient({ puzzle, isDev = false, allDates = [], curre
             />
           )}
           <div className="absolute inset-0 pointer-events-none z-10 pitch-vignette" />
+          {/* Attribution overlay — shown when image has CC license info */}
+          {puzzle.imageAttribution && (
+            <div className="absolute bottom-0 right-0 z-20 px-2 py-1 max-w-xs text-right pointer-events-auto"
+              style={{ background: "rgba(0,0,0,0.55)" }}>
+              {puzzle.imageSourceUrl ? (
+                <a href={puzzle.imageSourceUrl} target="_blank" rel="noopener noreferrer"
+                  className="text-[8px] font-led leading-tight block hover:underline"
+                  style={{ color: "rgba(255,255,255,0.45)" }}>
+                  {puzzle.imageAttribution}
+                </a>
+              ) : (
+                <span className="text-[8px] font-led leading-tight block"
+                  style={{ color: "rgba(255,255,255,0.45)" }}>
+                  {puzzle.imageAttribution}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right panel */}
