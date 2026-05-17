@@ -146,7 +146,7 @@ export const PUZZLES: Puzzle[] = [
   },
   {
     puzzleDate: "2026-05-17",
-    imageFile: "2026-05-17.jpg",
+    imageFile: "2026-05-17.png",
     event: "Kane's North London derby curler — scored wearing a protective face mask",
     difficulty: "medium",
     sourceUrl: "https://www.youtube.com/watch?v=VVq8dh1Z6Vo",
@@ -192,7 +192,7 @@ export const PUZZLES: Puzzle[] = [
   },
   {
     puzzleDate: "2026-05-19",
-    imageFile: "2026-05-19.jpg",
+    imageFile: "2026-05-19.png",
     event: "Van Persie flying header — Netherlands dismantle World Cup holders Spain 5–1",
     difficulty: "easy",
     sourceUrl: "https://www.espn.com/soccer/match/_/gameId/383301/netherlands-spain",
@@ -216,7 +216,7 @@ export const PUZZLES: Puzzle[] = [
   },
   {
     puzzleDate: "2026-05-20",
-    imageFile: "2026-05-20.jpg",
+    imageFile: "2026-05-20.png",
     event: "Blues vs Arsenal League Cup Final — Martins late winner after defensive mix-up",
     difficulty: "medium",
     sourceUrl: "https://www.espn.com/soccer/match/_/gameId/312300/birmingham-city-arsenal",
