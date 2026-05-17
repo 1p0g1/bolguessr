@@ -92,14 +92,18 @@ export default function ScoreboardPanel({ puzzle, onPhaseChange }: Props) {
 
       <div className="p-4 flex flex-col gap-4">
 
-        {/* Row 1: Year + Competition */}
-        <div className="grid grid-cols-2 gap-3 items-end">
-          <LedInput label="Year" value={guess.year} onChange={(v) => setField("year", v)}
-            type="number" disabled={revealed} correct={yearOk}
-            correctAnswer={yearOk === false ? String(correctYear) : undefined} />
-          <LedInput label="Competition" value={guess.competition} onChange={(v) => setField("competition", v)}
-            disabled={revealed} correct={compOk}
-            correctAnswer={compOk === false ? puzzle.match.competition : undefined} />
+        {/* Row 1: Year + Competition — side by side */}
+        <div className="flex gap-3 items-start">
+          <div className="w-28 shrink-0">
+            <LedInput label="Year" value={guess.year} onChange={(v) => setField("year", v)}
+              type="number" disabled={revealed} correct={yearOk}
+              correctAnswer={yearOk === false ? String(correctYear) : undefined} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <LedInput label="Competition" value={guess.competition} onChange={(v) => setField("competition", v)}
+              disabled={revealed} correct={compOk}
+              correctAnswer={compOk === false ? puzzle.match.competition : undefined} />
+          </div>
         </div>
 
         {/* Row 2: Stadium — full width */}
@@ -221,9 +225,7 @@ export default function ScoreboardPanel({ puzzle, onPhaseChange }: Props) {
             <motion.div key="result" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
               className="flex flex-col gap-3"
             >
-              {totalScore && <ScoreBar pts={totalScore.pts} max={totalScore.max} yearDiff={yearDiff} />}
-
-              {/* Scorer feedback */}
+              {/* 1 — Your scorer guesses with ✓/✗ feedback */}
               {(guess.homeScorers.filter(Boolean).length > 0 || guess.awayScorers.filter(Boolean).length > 0) && (
                 <div className="rounded-sm border px-3 py-2" style={{ background: "var(--pitch-inset)", borderColor: "var(--border-dim)" }}>
                   <p className="text-[9px] uppercase tracking-widest font-led text-label mb-2">Your scorers</p>
@@ -246,11 +248,7 @@ export default function ScoreboardPanel({ puzzle, onPhaseChange }: Props) {
                 </div>
               )}
 
-              <p className="text-[11px] font-led leading-relaxed rounded-sm px-3 py-2 border"
-                style={{ background: "var(--pitch-inset)", borderColor: "var(--border-dim)", color: "var(--text-label)" }}>
-                {puzzle.event}
-              </p>
-
+              {/* 2 — Actual scorers (answer reveal) */}
               {puzzle.match.goalScorers.length > 0 && (
                 <div className="text-[11px] font-led rounded-sm px-3 py-2 border"
                   style={{ background: "var(--pitch-inset)", borderColor: "var(--border-dim)", color: "var(--white-bright)" }}>
@@ -269,6 +267,15 @@ export default function ScoreboardPanel({ puzzle, onPhaseChange }: Props) {
                   </div>
                 </div>
               )}
+
+              {/* 3 — Score bar / result */}
+              {totalScore && <ScoreBar pts={totalScore.pts} max={totalScore.max} yearDiff={yearDiff} />}
+
+              {/* 4 — Event description */}
+              <p className="text-[11px] font-led leading-relaxed rounded-sm px-3 py-2 border"
+                style={{ background: "var(--pitch-inset)", borderColor: "var(--border-dim)", color: "var(--text-label)" }}>
+                {puzzle.event}
+              </p>
             </motion.div>
           </AnimatePresence>
         )}
