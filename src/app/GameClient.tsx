@@ -91,10 +91,10 @@ export default function GameClient({ puzzle, isDev = false, allDates = [], curre
       </header>
 
       {/* ── Main ───────────────────────────────────────────────────── */}
-      <main className="flex-1 flex flex-col lg:flex-row" style={{ minHeight: 0 }}>
+      <main className="flex-1 flex flex-col lg:flex-row overflow-hidden" style={{ minHeight: 0 }}>
 
         {/* Image pane */}
-        <div className="relative flex-1 min-h-[45vh] lg:min-h-0 bg-black scanlines overflow-hidden">
+        <div className="relative min-h-[45vh] lg:flex-1 lg:min-h-0 bg-black scanlines overflow-hidden">
           {imageError ? (
             <PlaceholderImage puzzleDate={puzzle.puzzleDate} imageFile={puzzle.imageFile} />
           ) : (
@@ -112,7 +112,7 @@ export default function GameClient({ puzzle, isDev = false, allDates = [], curre
         <div className="lg:w-[500px] border-t lg:border-t-0 lg:border-l flex flex-col overflow-y-auto"
           style={{ background: "var(--pitch-dark)", borderColor: "var(--border-dim)" }}>
           <div className="p-4 flex-1">
-            <ScoreboardPanel puzzle={puzzle} onPhaseChange={setPhase} />
+            <ScoreboardPanel key={puzzle.puzzleDate} puzzle={puzzle} onPhaseChange={setPhase} />
           </div>
 
           {/* Affiliate strip */}

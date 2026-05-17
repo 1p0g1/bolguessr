@@ -143,33 +143,55 @@ export default function ScoreboardPanel({ puzzle, onPhaseChange }: Props) {
               exit={{ opacity: 0, height: 0 }}
               className="overflow-hidden"
             >
-              <p className="text-[10px] uppercase tracking-[0.25em] font-led text-label mb-2">
-                Goal Scorers
-                <span className="ml-2 normal-case tracking-normal" style={{ color: "var(--text-dim)" }}>— bonus, optional</span>
-              </p>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+              <div className="flex items-center gap-2 mb-2">
+                <p className="text-[10px] uppercase tracking-[0.25em] font-led text-label">Goal Scorers</p>
+                <span
+                  className="text-[9px] font-led cursor-default"
+                  style={{ color: "var(--text-dim)" }}
+                  title="Enter scorers in the order they scored"
+                >
+                  ⓘ in order scored · optional
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-x-3">
                 {/* Home column */}
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-1.5">
                   {homeGoals > 0 && (
-                    <p className="text-[9px] uppercase tracking-widest font-led text-label text-left">
+                    <p className="text-[8px] uppercase tracking-widest font-led text-label truncate">
                       {guess.homeTeam || "Home"}
                     </p>
                   )}
                   {Array.from({ length: homeGoals }).map((_, i) => (
-                    <LedInput key={`h${i}`} label={`Scorer ${i + 1}`}
-                      value={guess.homeScorers[i] ?? ""} onChange={(v) => setHomeScorer(i, v)} size="sm" />
+                    <div key={`h${i}`} className="flex items-center gap-1.5">
+                      <span className="text-[9px] font-led shrink-0 w-5 text-right" style={{ color: "var(--border-mid)" }}>
+                        #{i + 1}
+                      </span>
+                      <input
+                        value={guess.homeScorers[i] ?? ""}
+                        onChange={(e) => setHomeScorer(i, e.target.value)}
+                        className="led-input w-full rounded-sm text-xs px-2 py-1 h-8"
+                      />
+                    </div>
                   ))}
                 </div>
                 {/* Away column */}
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-1.5">
                   {awayGoals > 0 && (
-                    <p className="text-[9px] uppercase tracking-widest font-led text-label text-right">
+                    <p className="text-[8px] uppercase tracking-widest font-led text-label text-right truncate">
                       {guess.awayTeam || "Away"}
                     </p>
                   )}
                   {Array.from({ length: awayGoals }).map((_, i) => (
-                    <LedInput key={`a${i}`} label={`Scorer ${i + 1}`}
-                      value={guess.awayScorers[i] ?? ""} onChange={(v) => setAwayScorer(i, v)} size="sm" />
+                    <div key={`a${i}`} className="flex items-center gap-1.5">
+                      <span className="text-[9px] font-led shrink-0 w-5 text-right" style={{ color: "var(--border-mid)" }}>
+                        #{i + 1}
+                      </span>
+                      <input
+                        value={guess.awayScorers[i] ?? ""}
+                        onChange={(e) => setAwayScorer(i, e.target.value)}
+                        className="led-input w-full rounded-sm text-xs px-2 py-1 h-8"
+                      />
+                    </div>
                   ))}
                 </div>
               </div>

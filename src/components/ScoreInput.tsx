@@ -32,6 +32,7 @@ export default function ScoreInput({
           max={20}
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          onWheel={(e) => e.currentTarget.blur()}
           disabled={disabled}
           className="w-full h-full bg-transparent text-5xl font-led font-black text-center outline-none border-none"
           style={{ color: textColor, WebkitTextFillColor: textColor }}

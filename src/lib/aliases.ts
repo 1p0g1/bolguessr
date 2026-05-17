@@ -1,199 +1,112 @@
-// Normalise a string for comparison — strips accents, punctuation, lowercases
+// Strip accents, punctuation, lowercase — the base normaliser
 export function norm(s: string): string {
   return s
     .trim()
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")   // strip diacritics (é→e, ü→u, etc.)
+    .replace(/[̀-ͯ]/g, "")  // strip diacritics
     .replace(/[^a-z0-9]/g, "");
 }
 
-// ── Competition aliases ────────────────────────────────────────────
-// Maps normalised guesses → normalised canonical answer
-const COMP_ALIASES: Record<string, string> = {
-  // Premier League
-  "prem":                     "premierleague",
-  "pl":                       "premierleague",
-  "epl":                      "premierleague",
-  "premierleague":            "premierleague",
-  "barclayspremierleague":    "premierleague",
-  "barclaysprem":             "premierleague",
-  "barclayspremership":       "premierleague",
-  "bpl":                      "premierleague",
-  "premership":               "premierleague",
+// ── Competition canonical patterns ────────────────────────────────
+// Each entry: canonical form + substrings that identify it.
+// Both the GUESS and the PUZZLE answer are passed through this —
+// so "2014 FIFA World Cup Group Stage" → "fifaworldcup"
+//     "World Cup"                      → "fifaworldcup"  ✓
+const COMP_PATTERNS: { canonical: string; match: string[] }[] = [
+  { canonical: "premierleague",          match: ["premierleague", "barclay", "barclays"] },
+  { canonical: "uefachampionsleague",    match: ["championsleague", "champsleague", "uefacl"] },
+  { canonical: "fifaworldcup",           match: ["worldcup", "fifawc"] },
+  { canonical: "uefaeuropeanchampionship", match: ["europeanchampionship", "uefaeuro", "euros"] },
+  { canonical: "eflchampionship",        match: ["eflchampionship"] },
+  { canonical: "footballleaguecupfinal", match: ["leaguecup", "carabaocup", "carlingcup", "eflcup", "leaguecupfinal"] },
+  { canonical: "facup",                  match: ["facup"] },
+  { canonical: "championshipplayofffinal", match: ["playofffinal", "playoffsfinal", "championshipplayoff"] },
+  { canonical: "ligue1",                 match: ["ligue1", "ligueun"] },
+  { canonical: "laliga",                 match: ["laliga", "primeradivision"] },
+  { canonical: "bundesliga",             match: ["bundesliga"] },
+];
 
-  // Champions League
-  "ucl":                      "uefachampionsleague",
-  "championsleague":          "uefachampionsleague",
-  "champsleague":             "uefachampionsleague",
-  "uefacl":                   "uefachampionsleague",
-  "europeanup":               "uefachampionsleague",
-  "cl":                       "uefachampionsleague",
-  "uefachampionsleague":      "uefachampionsleague",
-  "uefachampionleague":       "uefachampionsleague",
-
-  // World Cup
-  "worldcup":                 "fifaworldcup",
-  "fifawc":                   "fifaworldcup",
-  "wc":                       "fifaworldcup",
-  "fifaworldcup":             "fifaworldcup",
-  "worldcupquarterfinal":     "fifaworldcup",
-  "worldcupgroupstage":       "fifaworldcup",
-
-  // Euros
-  "euros":                    "uefaeuropeanchampionship",
-  "euro":                     "uefaeuropeanchampionship",
-  "europeanchampionship":     "uefaeuropeanchampionship",
-  "europeans":                "uefaeuropeanchampionship",
-  "uefaeuros":                "uefaeuropeanchampionship",
-  "uefaeuropeanchampionship": "uefaeuropeanchampionship",
-
-  // EFL Championship
-  "championship":             "eflchampionship",
-  "thechampionship":          "eflchampionship",
-  "eflchampionship":          "eflchampionship",
-  "2ndtier":                  "eflchampionship",
-
-  // League Cup
-  "leaguecup":                "footballleaguecupfinal",
-  "eflcup":                   "footballleaguecupfinal",
-  "carlingcup":               "footballleaguecupfinal",
-  "carabaocup":               "footballleaguecupfinal",
-  "leaguecupfinal":           "footballleaguecupfinal",
-  "footballleaguecupfinal":   "footballleaguecupfinal",
-  "caraboocup":               "footballleaguecupfinal",
-
-  // FA Cup
-  "facup":                    "facup",
-  "fac":                      "facup",
-
-  // Play-offs
-  "playofffinal":             "championshipplayofffinal",
-  "playoff":                  "championshipplayofffinal",
-  "playoffs":                 "championshipplayofffinal",
-  "playoffsfinal":            "championshipplayofffinal",
-  "championshipplayoff":      "championshipplayofffinal",
-  "championshipplayofffinal": "championshipplayofffinal",
-
-  // Ligue 1 (future-proofing)
-  "ligue1":                   "ligue1",
-  "ligueun":                  "ligue1",
-  "ligue un":                 "ligue1",
-  "french top flight":        "ligue1",
-  "french league":            "ligue1",
+// Direct single-word shortcuts (checked before pattern scan)
+const COMP_SHORTCUTS: Record<string, string> = {
+  "prem": "premierleague", "pl": "premierleague", "epl": "premierleague",
+  "premership": "premierleague", "bpl": "premierleague",
+  "ucl": "uefachampionsleague", "cl": "uefachampionsleague",
+  "worldcup": "fifaworldcup", "wc": "fifaworldcup", "fifawc": "fifaworldcup",
+  "euros": "uefaeuropeanchampionship", "euro": "uefaeuropeanchampionship",
+  "europeanchampionship": "uefaeuropeanchampionship",
+  "championship": "eflchampionship",
+  "leaguecup": "footballleaguecupfinal", "carabaocup": "footballleaguecupfinal",
+  "carlingcup": "footballleaguecupfinal", "eflcup": "footballleaguecupfinal",
+  "facup": "facup", "fac": "facup",
+  "playoff": "championshipplayofffinal", "playoffs": "championshipplayofffinal",
+  "playofffinal": "championshipplayofffinal",
+  "ligue1": "ligue1", "ligueun": "ligue1",
 };
 
 export function normaliseCompetition(raw: string): string {
+  if (!raw.trim()) return "";
   const n = norm(raw);
-  return COMP_ALIASES[n] ?? n;
+  // 1. Direct shortcut table
+  if (COMP_SHORTCUTS[n]) return COMP_SHORTCUTS[n];
+  // 2. Pattern contains-scan (handles "2014 FIFA World Cup Group Stage" etc.)
+  for (const { canonical, match } of COMP_PATTERNS) {
+    if (match.some((m) => n.includes(m))) return canonical;
+  }
+  return n;
 }
 
-export function normalisedPuzzleCompetition(competition: string): string {
-  // Reduce the puzzle's competition string to the same canonical form
-  const n = norm(competition);
-  return COMP_ALIASES[n] ?? n;
+// Use same function for puzzle answers — both sides normalise identically
+export const normalisedPuzzleCompetition = normaliseCompetition;
+
+
+// ── Scorer name matching ──────────────────────────────────────────
+// Returns true if guessed name matches actual name (full or partial)
+// "Van Persie" matches "Robin van Persie" via last-name suffix check
+export function scorerNamesMatch(guessed: string, actual: string): boolean {
+  const g = norm(guessed);
+  const a = norm(actual);
+  if (!g || g.length < 2) return false;
+  if (g === a) return true;
+  if (a.endsWith(g)) return true;           // last-name match: "vanpersie" ends "robinvanpersie"
+  if (a.includes(g) && g.length >= 4) return true; // substring: "cisse" in "papiscisse"
+  return false;
 }
 
-// ── Team name aliases ──────────────────────────────────────────────
+
+// ── Team aliases ──────────────────────────────────────────────────
 const TEAM_ALIASES: Record<string, string> = {
-  // Manchester United
-  "manutd":           "manchesterunited",
-  "manchesterutd":    "manchesterunited",
-  "manu":             "manchesterunited",
-  "manunited":        "manchesterunited",
-  "manchesterunited": "manchesterunited",
-  "reddevils":        "manchesterunited",
-
-  // Manchester City
-  "mancity":          "manchestercity",
-  "manchestercity":   "manchestercity",
-  "cityzens":         "manchestercity",
-  "mcfc":             "manchestercity",
-  "cityofmanchesterstadium": "manchestercity",
-
-  // Tottenham
-  "spurs":            "tottenhamhotspur",
-  "tottenham":        "tottenhamhotspur",
-  "thfc":             "tottenhamhotspur",
-  "tottenhamhotspur": "tottenhamhotspur",
-
-  // Arsenal
-  "arsenal":          "arsenal",
-  "gooners":          "arsenal",
-  "gunners":          "arsenal",
-  "afc":              "arsenal",
-
-  // Chelsea
-  "chelsea":          "chelsea",
-  "theblues":         "chelsea",
-  "cfc":              "chelsea",
-
-  // Liverpool
-  "liverpool":        "liverpool",
-  "lfc":              "liverpool",
-  "thereds":          "liverpool",
-
-  // Aston Villa
-  "villa":            "astonvilla",
-  "astonvilla":       "astonvilla",
-  "avfc":             "astonvilla",
-
-  // Birmingham City
-  "birmingham":       "birminghamcity",
-  "birminghamcity":   "birminghamcity",
-  "blues":            "birminghamcity",
-  "bcfc":             "birminghamcity",
-
-  // Newcastle United
-  "newcastle":        "newcastleunited",
-  "newcastleunited":  "newcastleunited",
-  "newcastleutd":     "newcastleunited",
-  "nufc":             "newcastleunited",
-  "toon":             "newcastleunited",
-  "thetoon":          "newcastleunited",
-
-  // Leeds United
-  "leeds":            "leedsunited",
-  "leedsunited":      "leedsunited",
-  "leedsutd":         "leedsunited",
-  "lufc":             "leedsunited",
-
-  // Stoke City
-  "stoke":            "stokecity",
-  "stokecity":        "stokecity",
-  "thepotters":       "stokecity",
-
-  // Sheffield United
-  "sheffieldunited":  "sheffieldunited",
-  "sheffieldutd":     "sheffieldunited",
-  "sheffu":           "sheffieldunited",
-  "sufc":             "sheffieldunited",
-  "blades":           "sheffieldunited",
-
-  // Derby County
-  "derby":            "derbycounty",
-  "derbycounty":      "derbycounty",
-  "rams":             "derbycounty",
-  "dcfc":             "derbycounty",
-
-  // Queens Park Rangers
-  "qpr":              "queensparkrangers",
-  "queensparkrangers":"queensparkrangers",
-  "queenspark":       "queensparkrangers",
-
-  // International
-  "england":          "england",
-  "threelions":       "england",
-  "argentina":        "argentina",
-  "albiceleste":      "argentina",
-  "spain":            "spain",
-  "larroja":          "spain",
-  "netherlands":      "netherlands",
-  "holland":          "netherlands",
-  "dutch":            "netherlands",
-  "oranje":           "netherlands",
-  "galatasaray":      "galatasaray",
-  "gala":             "galatasaray",
+  "manutd": "manchesterunited", "manchesterutd": "manchesterunited",
+  "manu": "manchesterunited", "manunited": "manchesterunited",
+  "manchesterunited": "manchesterunited", "reddevils": "manchesterunited",
+  "mancity": "manchestercity", "manchestercity": "manchestercity",
+  "cityzens": "manchestercity", "mcfc": "manchestercity",
+  "spurs": "tottenhamhotspur", "tottenham": "tottenhamhotspur",
+  "thfc": "tottenhamhotspur", "tottenhamhotspur": "tottenhamhotspur",
+  "arsenal": "arsenal", "gooners": "arsenal", "gunners": "arsenal", "afc": "arsenal",
+  "chelsea": "chelsea", "theblues": "chelsea", "cfc": "chelsea",
+  "liverpool": "liverpool", "lfc": "liverpool", "thereds": "liverpool",
+  "villa": "astonvilla", "astonvilla": "astonvilla", "avfc": "astonvilla",
+  "birmingham": "birminghamcity", "birminghamcity": "birminghamcity",
+  "blues": "birminghamcity", "bcfc": "birminghamcity",
+  "newcastle": "newcastleunited", "newcastleunited": "newcastleunited",
+  "newcastleutd": "newcastleunited", "nufc": "newcastleunited",
+  "toon": "newcastleunited", "thetoon": "newcastleunited",
+  "leeds": "leedsunited", "leedsunited": "leedsunited",
+  "leedsutd": "leedsunited", "lufc": "leedsunited",
+  "stoke": "stokecity", "stokecity": "stokecity", "thepotters": "stokecity",
+  "sheffieldunited": "sheffieldunited", "sheffieldutd": "sheffieldunited",
+  "sheffu": "sheffieldunited", "sufc": "sheffieldunited", "blades": "sheffieldunited",
+  "derby": "derbycounty", "derbycounty": "derbycounty",
+  "rams": "derbycounty", "dcfc": "derbycounty",
+  "qpr": "queensparkrangers", "queensparkrangers": "queensparkrangers",
+  "queenspark": "queensparkrangers",
+  "england": "england", "threelions": "england",
+  "argentina": "argentina", "albiceleste": "argentina",
+  "spain": "spain", "larroja": "spain",
+  "netherlands": "netherlands", "holland": "netherlands",
+  "dutch": "netherlands", "oranje": "netherlands",
+  "galatasaray": "galatasaray", "gala": "galatasaray",
 };
 
 export function normaliseTeam(raw: string): string {
