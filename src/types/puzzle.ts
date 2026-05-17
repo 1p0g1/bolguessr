@@ -44,6 +44,8 @@ export interface ScoreBreakdown {
   goalScorers: number;
   total: number;
   maxPossible: number;
+  /** Both teams correctly identified but home/away positions swapped */
+  teamsSwapped: boolean;
 }
 
 export type GamePhase = "guessing" | "revealed";

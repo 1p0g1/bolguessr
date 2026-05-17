@@ -32,8 +32,18 @@ export function calculateScore(puzzle: Puzzle, guess: GuessState): ScoreBreakdow
   }
 
   // ── Teams ──────────────────────────────────────────────────────────────────
-  const homeTeam = normaliseTeam(guess.homeTeam) === normaliseTeam(puzzle.match.homeTeam) ? MAX_TEAM : 0;
-  const awayTeam = normaliseTeam(guess.awayTeam) === normaliseTeam(puzzle.match.awayTeam) ? MAX_TEAM : 0;
+  // 10 pts each for correct home/away. If both teams are right but sides are swapped → 5+5 = 10 total.
+  const homeNorm      = normaliseTeam(guess.homeTeam);
+  const awayNorm      = normaliseTeam(guess.awayTeam);
+  const actualHomeNorm = normaliseTeam(puzzle.match.homeTeam);
+  const actualAwayNorm = normaliseTeam(puzzle.match.awayTeam);
+  const teamsSwapped  = !!(homeNorm && awayNorm && homeNorm === actualAwayNorm && awayNorm === actualHomeNorm);
+
+  let homeTeam = 0, awayTeam = 0;
+  if (homeNorm === actualHomeNorm) { homeTeam = MAX_TEAM; }
+  else if (teamsSwapped)           { homeTeam = 5; }
+  if (awayNorm === actualAwayNorm) { awayTeam = MAX_TEAM; }
+  else if (teamsSwapped)           { awayTeam = 5; }
 
   // ── Competition ────────────────────────────────────────────────────────────
   const compGuess  = normaliseCompetition(guess.competition);
@@ -63,13 +73,16 @@ export function calculateScore(puzzle: Puzzle, guess: GuessState): ScoreBreakdow
     }
   }
 
-  // ── Goal scorers — POSITIONAL matching ────────────────────────────────────
-  // Guess #N is compared against actual scorer #N (in the order they scored).
-  // Home guesses matched against home scorer list, away against away scorer list.
-  // This rewards knowing who scored AND in what order.
-  const homeActual = puzzle.match.goalScorers.filter((g) => g.team === "home");
-  const awayActual = puzzle.match.goalScorers.filter((g) => g.team === "away");
-  const totalGoals = homeActual.length + awayActual.length;
+  // ── Goal scorers — POSITIONAL matching, team-aware ────────────────────────
+  // Guess #N is compared against actual scorer #N in the order they scored.
+  // If teams were swapped (player put home team as away and vice versa), the scorer
+  // columns are also swapped so correct positional guesses are still rewarded.
+  const realHomeScorers = puzzle.match.goalScorers.filter((g) => g.team === "home");
+  const realAwayScorers = puzzle.match.goalScorers.filter((g) => g.team === "away");
+  // When swapped: player's "home" inputs should be checked against actual away scorers
+  const homeActual = teamsSwapped ? realAwayScorers : realHomeScorers;
+  const awayActual = teamsSwapped ? realHomeScorers : realAwayScorers;
+  const totalGoals = realHomeScorers.length + realAwayScorers.length;
 
   let goalScorers = 0;
   if (totalGoals > 0) {
@@ -86,11 +99,12 @@ export function calculateScore(puzzle: Puzzle, guess: GuessState): ScoreBreakdow
   const maxPossible = MAX_YEAR + MAX_TEAM + MAX_TEAM + MAX_COMPETITION + MAX_STADIUM + MAX_SCORE +
     (totalGoals > 0 ? MAX_SCORERS : 0);
   const total = year + homeTeam + awayTeam + competition + stadium + score + goalScorers;
-  return { year, competition, stadium, homeTeam, awayTeam, score, goalScorers, total, maxPossible };
+  return { year, competition, stadium, homeTeam, awayTeam, score, goalScorers, total, maxPossible, teamsSwapped };
 }
 
 // ── Per-scorer hit array for UI feedback ─────────────────────────────────────
-// POSITIONAL: guess[i] is checked against actual[i] (not any element in pool).
+// POSITIONAL: guess[i] is checked against actual[i].
+// Call with the CORRECT actual list for that column (already swapped if needed).
 export function scorerHits(guessed: string[], actual: { player: string }[]): boolean[] {
   return guessed.map((name, i) => {
     if (!name || i >= actual.length) return false;

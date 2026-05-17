@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Puzzle, GuessState, GamePhase } from "@/types/puzzle";
+import { Puzzle, GuessState, GamePhase, ScoreBreakdown } from "@/types/puzzle";
 import { calculateScore, scorerHits } from "@/lib/scoring";
 import { norm, normaliseCompetition, normalisedPuzzleCompetition, normaliseTeam } from "@/lib/aliases";
 import LedInput from "./LedInput";
@@ -23,7 +23,7 @@ const emptyGuess = (): GuessState => ({
 export default function ScoreboardPanel({ puzzle, onPhaseChange }: Props) {
   const [phase, setPhase] = useState<GamePhase>("guessing");
   const [guess, setGuess] = useState<GuessState>(emptyGuess());
-  const [totalScore, setTotalScore] = useState<{ pts: number; max: number } | null>(null);
+  const [breakdown, setBreakdown] = useState<ScoreBreakdown | null>(null);
 
   const homeGoals = Math.max(0, parseInt(guess.homeScore, 10) || 0);
   const awayGoals = Math.max(0, parseInt(guess.awayScore, 10) || 0);
@@ -40,8 +40,8 @@ export default function ScoreboardPanel({ puzzle, onPhaseChange }: Props) {
   }
 
   function handleSubmit() {
-    const breakdown = calculateScore(puzzle, guess);
-    setTotalScore({ pts: breakdown.total, max: breakdown.maxPossible });
+    const bd = calculateScore(puzzle, guess);
+    setBreakdown(bd);
     setPhase("revealed");
     onPhaseChange?.("revealed");
   }
@@ -69,12 +69,16 @@ export default function ScoreboardPanel({ puzzle, onPhaseChange }: Props) {
     ? stadGuess.length >= 3 && (stadGuess === stadAnswer || stadAnswer.includes(stadGuess) || stadGuess.includes(stadAnswer))
     : null;
 
-  // Scorer hit arrays (for feedback)
+  // Scorer hit arrays — respect team swap so Van Persie guessed under "home" still
+  // scores if the player correctly identified the teams but put them on the wrong side
+  const teamsSwapped = breakdown?.teamsSwapped ?? false;
+  const realHomeScorers = puzzle.match.goalScorers.filter(g => g.team === "home");
+  const realAwayScorers = puzzle.match.goalScorers.filter(g => g.team === "away");
   const homeHits = revealed
-    ? scorerHits(guess.homeScorers, puzzle.match.goalScorers.filter(g => g.team === "home"))
+    ? scorerHits(guess.homeScorers, teamsSwapped ? realAwayScorers : realHomeScorers)
     : [];
   const awayHits = revealed
-    ? scorerHits(guess.awayScorers, puzzle.match.goalScorers.filter(g => g.team === "away"))
+    ? scorerHits(guess.awayScorers, teamsSwapped ? realHomeScorers : realAwayScorers)
     : [];
 
   const canSubmit = guess.year && guess.homeTeam && guess.awayTeam &&
@@ -269,13 +273,18 @@ export default function ScoreboardPanel({ puzzle, onPhaseChange }: Props) {
               )}
 
               {/* 3 — Score bar / result */}
-              {totalScore && <ScoreBar pts={totalScore.pts} max={totalScore.max} yearDiff={yearDiff} />}
+              {breakdown && <ScoreBar pts={breakdown.total} max={breakdown.maxPossible} yearDiff={yearDiff} />}
 
               {/* 4 — Event description */}
               <p className="text-[11px] font-led leading-relaxed rounded-sm px-3 py-2 border"
                 style={{ background: "var(--pitch-inset)", borderColor: "var(--border-dim)", color: "var(--text-label)" }}>
                 {puzzle.event}
               </p>
+
+              {/* 5 — Share button */}
+              {breakdown && (
+                <ShareButton puzzle={puzzle} breakdown={breakdown} />
+              )}
             </motion.div>
           </AnimatePresence>
         )}
@@ -283,6 +292,59 @@ export default function ScoreboardPanel({ puzzle, onPhaseChange }: Props) {
     </div>
   );
 }
+
+// ── Share ─────────────────────────────────────────────────────────────────────
+
+function emojiResult(pts: number, max: number): string {
+  if (pts === max) return "✅";
+  if (pts > 0)     return "🤏";
+  return "❌";
+}
+
+function buildShareText(puzzle: Puzzle, bd: ScoreBreakdown): string {
+  const date = new Date(puzzle.puzzleDate + "T12:00:00").toLocaleDateString("en-GB", {
+    day: "numeric", month: "short", year: "numeric",
+  });
+  const e = emojiResult;
+  return [
+    `BolGuessr • ${date} • ${bd.total}/${bd.maxPossible}`,
+    ``,
+    `📆${e(bd.year, 15)}  🏆${e(bd.competition, 10)}  🏟️${e(bd.stadium, 15)}`,
+    `🏠${e(bd.homeTeam, 10)}  🅰️${e(bd.awayTeam, 10)}  🎯${e(bd.score, 15)}  ⚽${e(bd.goalScorers, 25)}`,
+    ``,
+    `bolguessr.com`,
+  ].join("\n");
+}
+
+function ShareButton({ puzzle, breakdown }: { puzzle: Puzzle; breakdown: ScoreBreakdown }) {
+  const [copied, setCopied] = useState(false);
+
+  function handleShare() {
+    const text = buildShareText(puzzle, breakdown);
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <button
+      onClick={handleShare}
+      className="w-full py-2.5 rounded-sm font-led font-bold text-xs tracking-[0.2em] uppercase transition-all duration-200 flex items-center justify-center gap-2"
+      style={{
+        border: "2px solid",
+        borderColor: copied ? "var(--green-led)" : "var(--amber)",
+        color:       copied ? "var(--green-led)" : "var(--amber)",
+        background:  "transparent",
+        boxShadow:   copied ? "0 0 16px rgba(93,252,122,0.2)" : "0 0 16px var(--amber-glow)",
+      }}
+    >
+      {copied ? "✓ Copied!" : "Share Result"}
+    </button>
+  );
+}
+
+// ── Score bar ─────────────────────────────────────────────────────────────────
 
 function ScoreBar({ pts, max, yearDiff }: { pts: number; max: number; yearDiff: number }) {
   const pct   = Math.round((pts / max) * 100);
