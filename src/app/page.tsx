@@ -1,8 +1,18 @@
-import { getTodaysPuzzle } from "@/data/puzzles";
+import { getPuzzleForDate, getTodaysPuzzle, PUZZLES } from "@/data/puzzles";
 import GameClient from "./GameClient";
 
-export default function Home() {
-  const puzzle = getTodaysPuzzle();
+interface Props {
+  searchParams: Promise<{ date?: string; dev?: string }>;
+}
 
-  return <GameClient puzzle={puzzle} />;
+export default async function Home({ searchParams }: Props) {
+  const params = await searchParams;
+  const isDev = params.dev === "1";
+  const puzzle = params.date
+    ? getPuzzleForDate(params.date)
+    : getTodaysPuzzle();
+
+  const allDates = PUZZLES.map((p) => p.puzzleDate).sort();
+
+  return <GameClient puzzle={puzzle} isDev={isDev} allDates={allDates} currentDate={params.date} />;
 }

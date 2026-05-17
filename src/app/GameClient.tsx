@@ -2,22 +2,48 @@
 
 import Image from "next/image";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Puzzle, GamePhase } from "@/types/puzzle";
 import ScoreboardPanel from "@/components/ScoreboardPanel";
 
 interface Props {
   puzzle: Puzzle | null;
+  isDev?: boolean;
+  allDates?: string[];
+  currentDate?: string;
 }
 
-export default function GameClient({ puzzle }: Props) {
+export default function GameClient({ puzzle, isDev = false, allDates = [], currentDate }: Props) {
   const [, setPhase] = useState<GamePhase>("guessing");
   const [imageError, setImageError] = useState(false);
+  const router = useRouter();
+
+  // Dev mode: current index into allDates
+  const activeDateStr = currentDate ?? new Date().toISOString().split("T")[0];
+  const activeIdx = allDates.indexOf(activeDateStr);
+  const prevDate = activeIdx > 0 ? allDates[activeIdx - 1] : null;
+  const nextDate = activeIdx < allDates.length - 1 ? allDates[activeIdx + 1] : null;
+
+  function navTo(date: string) {
+    router.push(`/?date=${date}&dev=1`);
+    setImageError(false);
+  }
 
   if (!puzzle) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4">
         <div className="text-4xl font-led led-amber">No puzzle today</div>
         <p className="font-led text-sm tracking-widest text-label">Check back tomorrow.</p>
+        {isDev && allDates.length > 0 && (
+          <div className="flex gap-3 mt-4">
+            {allDates.slice(-5).map((d) => (
+              <button key={d} onClick={() => navTo(d)}
+                className="text-xs font-led px-3 py-1 rounded border border-[var(--border-mid)] text-label hover:text-[var(--amber)] hover:border-[var(--amber)] transition-colors">
+                {d}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
@@ -26,21 +52,36 @@ export default function GameClient({ puzzle }: Props) {
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: "var(--pitch-dark)" }}>
-      {/* Header */}
-      <header
-        className="flex items-center justify-between px-5 py-2 border-b z-20 relative shrink-0"
-        style={{ background: "var(--pitch-panel)", borderColor: "var(--border-dim)" }}
-      >
-        <div className="flex items-center gap-3">
-          <Image
-            src="/logo-bolguessr.png"
-            alt="BolGuessr"
-            height={36}
-            width={220}
-            className="object-contain"
-            priority
-          />
+
+      {/* ── Dev mode toolbar ───────────────────────────────────────── */}
+      {isDev && (
+        <div className="flex items-center justify-between px-4 py-1.5 text-[11px] font-led shrink-0"
+          style={{ background: "#1a0a00", borderBottom: "1px solid #ff6600" }}>
+          <span style={{ color: "#ff6600" }}>⚙ DEV MODE</span>
+          <div className="flex items-center gap-2">
+            <button onClick={() => prevDate && navTo(prevDate)} disabled={!prevDate}
+              className="px-2 py-0.5 rounded border disabled:opacity-30 transition-colors"
+              style={{ borderColor: "#ff6600", color: "#ff6600" }}>
+              ← prev
+            </button>
+            <span style={{ color: "#ff9944" }}>{activeDateStr}</span>
+            <span style={{ color: "#ff6600" }}>·</span>
+            <span style={{ color: "#ff9944" }}>{puzzle.event.split(" — ")[0]}</span>
+            <button onClick={() => nextDate && navTo(nextDate)} disabled={!nextDate}
+              className="px-2 py-0.5 rounded border disabled:opacity-30 transition-colors"
+              style={{ borderColor: "#ff6600", color: "#ff6600" }}>
+              next →
+            </button>
+          </div>
+          <span style={{ color: "#ff6600" }}>{activeIdx + 1} / {allDates.length}</span>
         </div>
+      )}
+
+      {/* ── Header ─────────────────────────────────────────────────── */}
+      <header className="flex items-center justify-between px-5 py-2 border-b z-20 relative shrink-0"
+        style={{ background: "var(--pitch-panel)", borderColor: "var(--border-dim)" }}>
+        <Image src="/logo-bolguessr.png" alt="BolGuessr" height={36} width={220}
+          className="object-contain" priority />
         <div className="text-[11px] font-led tracking-[0.25em] text-label uppercase hidden sm:block">
           {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}
         </div>
@@ -49,40 +90,34 @@ export default function GameClient({ puzzle }: Props) {
         </div>
       </header>
 
-      {/* Main */}
+      {/* ── Main ───────────────────────────────────────────────────── */}
       <main className="flex-1 flex flex-col lg:flex-row" style={{ minHeight: 0 }}>
+
         {/* Image pane */}
         <div className="relative flex-1 min-h-[45vh] lg:min-h-0 bg-black scanlines overflow-hidden">
           {imageError ? (
-            <PlaceholderImage />
+            <PlaceholderImage puzzleDate={puzzle.puzzleDate} imageFile={puzzle.imageFile} />
           ) : (
-            <Image
-              src={imageSrc}
-              alt="Identify this football moment"
-              fill
-              className="object-cover object-center"
-              priority
+            <Image src={imageSrc} alt="Identify this football moment" fill
+              className="object-cover object-center" priority
               onError={() => setImageError(true)}
               sizes="(max-width: 1024px) 100vw, 60vw"
+              unoptimized={puzzle.imageFile.endsWith(".avif")}
             />
           )}
           <div className="absolute inset-0 pointer-events-none z-10 pitch-vignette" />
         </div>
 
         {/* Right panel */}
-        <div
-          className="lg:w-[500px] border-t lg:border-t-0 lg:border-l flex flex-col overflow-y-auto"
-          style={{ background: "var(--pitch-dark)", borderColor: "var(--border-dim)" }}
-        >
+        <div className="lg:w-[500px] border-t lg:border-t-0 lg:border-l flex flex-col overflow-y-auto"
+          style={{ background: "var(--pitch-dark)", borderColor: "var(--border-dim)" }}>
           <div className="p-4 flex-1">
             <ScoreboardPanel puzzle={puzzle} onPhaseChange={setPhase} />
           </div>
 
           {/* Affiliate strip */}
-          <div
-            className="border-t px-4 py-3 shrink-0"
-            style={{ background: "var(--pitch-panel)", borderColor: "var(--border-dim)" }}
-          >
+          <div className="border-t px-4 py-3 shrink-0"
+            style={{ background: "var(--pitch-panel)", borderColor: "var(--border-dim)" }}>
             <p className="text-[9px] uppercase tracking-[0.3em] text-label font-led mb-2 text-center">
               Watch Live Football
             </p>
@@ -103,35 +138,27 @@ export default function GameClient({ puzzle }: Props) {
 
 function AffiliateChip({ label, href }: { label: string; href: string }) {
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer nofollow"
+    <a href={href} target="_blank" rel="noopener noreferrer nofollow"
       className="text-[10px] font-led px-3 py-1 rounded-sm border tracking-widest uppercase transition-colors"
       style={{ borderColor: "var(--border-mid)", color: "var(--text-label)" }}
-      onMouseOver={(e) => {
-        const el = e.currentTarget as HTMLAnchorElement;
-        el.style.borderColor = "var(--amber)";
-        el.style.color = "var(--amber)";
-      }}
-      onMouseOut={(e) => {
-        const el = e.currentTarget as HTMLAnchorElement;
-        el.style.borderColor = "var(--border-mid)";
-        el.style.color = "var(--text-label)";
-      }}
-    >
+      onMouseOver={(e) => { const el = e.currentTarget as HTMLAnchorElement; el.style.borderColor = "var(--amber)"; el.style.color = "var(--amber)"; }}
+      onMouseOut={(e) => { const el = e.currentTarget as HTMLAnchorElement; el.style.borderColor = "var(--border-mid)"; el.style.color = "var(--text-label)"; }}>
       {label}
     </a>
   );
 }
 
-function PlaceholderImage() {
+function PlaceholderImage({ puzzleDate, imageFile }: { puzzleDate: string; imageFile: string }) {
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center gap-4" style={{ background: "var(--pitch-panel)" }}>
-      <Image src="/favicon.png" alt="" width={80} height={80} className="opacity-30" />
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3"
+      style={{ background: "var(--pitch-panel)" }}>
+      <Image src="/favicon.png" alt="" width={64} height={64} className="opacity-20" />
       <p className="font-led text-[10px] tracking-[0.3em] uppercase" style={{ color: "var(--text-dim)" }}>
         Image coming soon
       </p>
+      <code className="text-[10px] font-led px-2 py-1 rounded border" style={{ color: "var(--text-label)", borderColor: "var(--border-dim)", background: "var(--pitch-inset)" }}>
+        public/images/puzzles/{imageFile}
+      </code>
     </div>
   );
 }
