@@ -5,7 +5,8 @@ interface ScoreInputProps {
   value: string;
   onChange: (v: string) => void;
   disabled?: boolean;
-  correct?: boolean | null;
+  // null = guessing, true = correct (green), "partial" = close (amber), false = wrong (red)
+  correct?: boolean | "partial" | null;
   correctAnswer?: number;
 }
 
@@ -13,13 +14,15 @@ export default function ScoreInput({
   label, value, onChange, disabled, correct, correctAnswer,
 }: ScoreInputProps) {
   const borderColor =
-    correct === true  ? "var(--green-led)" :
-    correct === false ? "var(--red-led)"   :
+    correct === true      ? "var(--green-led)" :
+    correct === "partial" ? "var(--amber)"     :
+    correct === false     ? "var(--red-led)"   :
     "var(--border-dim)";
 
   const textColor =
-    correct === true  ? "var(--green-led)" :
-    correct === false ? "var(--red-led)"   :
+    correct === true      ? "var(--green-led)" :
+    correct === "partial" ? "var(--amber)"     :
+    correct === false     ? "var(--red-led)"   :
     "var(--amber)";
 
   return (

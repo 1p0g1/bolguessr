@@ -116,6 +116,11 @@ body {
   color: var(--green-led) !important;
   -webkit-text-fill-color: var(--green-led) !important;
 }
+.field-partial {
+  border-bottom-color: var(--amber) !important;
+  color: var(--amber) !important;
+  -webkit-text-fill-color: var(--amber) !important;
+}
 .field-wrong {
   border-bottom-color: var(--red-led) !important;
   color: var(--red-led) !important;

@@ -60,8 +60,10 @@ export function calculateScore(puzzle: Puzzle, guess: GuessState): ScoreBreakdow
   }
 
   // ── Score ─────────────────────────────────────────────────────────────────
-  const correctHome = puzzle.match.score.home;
-  const correctAway = puzzle.match.score.away;
+  // When teams are swapped, the player attributed their scores to the correct
+  // teams but on the wrong side — so compare against the swapped expected values.
+  const correctHome = teamsSwapped ? puzzle.match.score.away  : puzzle.match.score.home;
+  const correctAway = teamsSwapped ? puzzle.match.score.home  : puzzle.match.score.away;
   const guessHome   = parseInt(guess.homeScore, 10);
   const guessAway   = parseInt(guess.awayScore, 10);
   let score = 0;

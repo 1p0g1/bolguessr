@@ -10,8 +10,8 @@ interface LedInputProps {
   max?: number;
   disabled?: boolean;
   size?: "sm" | "md" | "lg";
-  // null = guessing (no state), true = correct, false = wrong
-  correct?: boolean | null;
+  // null = guessing, true = correct (green), "partial" = close (amber), false = wrong (red)
+  correct?: boolean | "partial" | null;
   correctAnswer?: string; // shown below input when wrong
 }
 
@@ -35,8 +35,9 @@ export default function LedInput({
   };
 
   const stateClass =
-    correct === true  ? "field-correct" :
-    correct === false ? "field-wrong"   : "";
+    correct === true      ? "field-correct"  :
+    correct === "partial" ? "field-partial"  :
+    correct === false     ? "field-wrong"    : "";
 
   return (
     <div className="flex flex-col gap-1 w-full">

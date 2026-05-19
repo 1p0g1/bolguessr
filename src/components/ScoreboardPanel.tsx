@@ -49,29 +49,49 @@ export default function ScoreboardPanel({ puzzle, onPhaseChange }: Props) {
   const revealed = phase === "revealed";
 
   // ── Correctness (post-reveal only) ──────────────────────────────
-  const correctYear   = new Date(puzzle.match.date).getFullYear();
-  const guessYear     = parseInt(guess.year, 10);
-  const yearDiff      = isNaN(guessYear) ? 99 : Math.abs(correctYear - guessYear);
+  const correctYear = new Date(puzzle.match.date).getFullYear();
+  const guessYear   = parseInt(guess.year, 10);
+  const yearDiff    = isNaN(guessYear) ? 99 : Math.abs(correctYear - guessYear);
 
-  const yearOk      = revealed ? guessYear === correctYear : null;
-  const homeOk      = revealed ? normaliseTeam(guess.homeTeam) === normaliseTeam(puzzle.match.homeTeam) : null;
-  const awayOk      = revealed ? normaliseTeam(guess.awayTeam) === normaliseTeam(puzzle.match.awayTeam) : null;
-  const homeScoreOk = revealed ? parseInt(guess.homeScore) === puzzle.match.score.home : null;
-  const awayScoreOk = revealed ? parseInt(guess.awayScore) === puzzle.match.score.away : null;
+  // Partial states: null=guessing, true=correct, "partial"=close/amber, false=wrong/red
+  const yearOk: boolean | "partial" | null = revealed
+    ? (yearDiff === 0 ? true : yearDiff <= 3 ? "partial" : false)
+    : null;
 
-  const compOk = revealed
+  const teamsSwapped = breakdown?.teamsSwapped ?? false;
+
+  const homeOk: boolean | "partial" | null = revealed
+    ? (normaliseTeam(guess.homeTeam) === normaliseTeam(puzzle.match.homeTeam) ? true
+      : teamsSwapped ? "partial"
+      : false)
+    : null;
+
+  const awayOk: boolean | "partial" | null = revealed
+    ? (normaliseTeam(guess.awayTeam) === normaliseTeam(puzzle.match.awayTeam) ? true
+      : teamsSwapped ? "partial"
+      : false)
+    : null;
+
+  // Score correctness — swap expected values when teams are swapped
+  const expectedHome = teamsSwapped ? puzzle.match.score.away : puzzle.match.score.home;
+  const expectedAway = teamsSwapped ? puzzle.match.score.home : puzzle.match.score.away;
+  const homeScoreOk: boolean | null = revealed ? parseInt(guess.homeScore) === expectedHome : null;
+  const awayScoreOk: boolean | null = revealed ? parseInt(guess.awayScore) === expectedAway : null;
+
+  const compOk: boolean | null = revealed
     ? normaliseCompetition(guess.competition) === normalisedPuzzleCompetition(puzzle.match.competition)
     : null;
 
   const stadGuess  = norm(guess.stadium);
   const stadAnswer = norm(puzzle.match.stadium);
-  const stadOk = revealed
-    ? stadGuess.length >= 3 && (stadGuess === stadAnswer || stadAnswer.includes(stadGuess) || stadGuess.includes(stadAnswer))
+  const stadOk: boolean | "partial" | null = revealed
+    ? (stadGuess.length < 3 ? false
+      : stadGuess === stadAnswer ? true
+      : (stadAnswer.includes(stadGuess) || stadGuess.includes(stadAnswer)) ? "partial"
+      : false)
     : null;
 
-  // Scorer hit arrays — respect team swap so Van Persie guessed under "home" still
-  // scores if the player correctly identified the teams but put them on the wrong side
-  const teamsSwapped = breakdown?.teamsSwapped ?? false;
+  // Scorer hit arrays — respect team swap
   const realHomeScorers = puzzle.match.goalScorers.filter(g => g.team === "home");
   const realAwayScorers = puzzle.match.goalScorers.filter(g => g.team === "away");
   const homeHits = revealed
@@ -273,7 +293,7 @@ export default function ScoreboardPanel({ puzzle, onPhaseChange }: Props) {
               )}
 
               {/* 3 — Score bar / result */}
-              {breakdown && <ScoreBar pts={breakdown.total} max={breakdown.maxPossible} yearDiff={yearDiff} />}
+              {breakdown && <ScoreBar pts={breakdown.total} max={breakdown.maxPossible} breakdown={breakdown} yearDiff={yearDiff} />}
 
               {/* 4 — Event description */}
               <p className="text-[11px] font-led leading-relaxed rounded-sm px-3 py-2 border"
@@ -346,18 +366,35 @@ function ShareButton({ puzzle, breakdown }: { puzzle: Puzzle; breakdown: ScoreBr
 
 // ── Score bar ─────────────────────────────────────────────────────────────────
 
-function ScoreBar({ pts, max, yearDiff }: { pts: number; max: number; yearDiff: number }) {
+function ScoreBar({ pts, max, breakdown, yearDiff }: {
+  pts: number; max: number;
+  breakdown: ScoreBreakdown;
+  yearDiff: number;
+}) {
   const pct   = Math.round((pts / max) * 100);
   const color = pct >= 75 ? "var(--green-led)" : pct >= 40 ? "var(--amber)" : "var(--red-led)";
-  const yearNote = yearDiff === 0 ? null : yearDiff <= 2 ? "close on the year" : yearDiff <= 5 ? "year was off" : "year way off";
+
+  // Build list of "close call" notes — things the player got partially right
+  const notes: string[] = [];
+  if (yearDiff > 0 && yearDiff <= 3)   notes.push(`year off by ${yearDiff}`);
+  if (breakdown.teamsSwapped)           notes.push("home & away swapped");
+  if (breakdown.stadium === 9)          notes.push("close on stadium");
+  if (breakdown.score === 5)            notes.push("one score right");
+  if (breakdown.goalScorers > 0 && breakdown.goalScorers < 25)
+                                        notes.push("some scorers correct");
+
   return (
     <div className="rounded-sm border px-4 py-3 flex items-center justify-between gap-4"
       style={{ background: "var(--pitch-inset)", borderColor: "var(--border-dim)" }}>
-      <div className="flex flex-col gap-0.5">
+      <div className="flex flex-col gap-1">
         <span className="text-[10px] tracking-[0.3em] uppercase font-led text-label">Result</span>
-        {yearNote && <span className="text-[10px] font-led led-amber-dim">{yearNote}</span>}
+        {notes.map((n, i) => (
+          <span key={i} className="text-[10px] font-led" style={{ color: "var(--amber-dim)" }}>
+            🤏 {n}
+          </span>
+        ))}
       </div>
-      <span className="text-3xl font-led font-black" style={{ color, textShadow: `0 0 10px ${color}66` }}>
+      <span className="text-3xl font-led font-black shrink-0" style={{ color, textShadow: `0 0 10px ${color}66` }}>
         {pts}<span className="text-sm font-led text-label">/{max}</span>
       </span>
     </div>
