@@ -72,22 +72,32 @@ export default function ScoreboardPanel({ puzzle, onPhaseChange }: Props) {
       : false)
     : null;
 
-  // Score correctness — swap expected values when teams are swapped
+  // Score correctness — swap expected values when teams are swapped.
+  // If teams were swapped, scores are amber not green: the numbers match the
+  // right teams but the home/away context was wrong.
   const expectedHome = teamsSwapped ? puzzle.match.score.away : puzzle.match.score.home;
   const expectedAway = teamsSwapped ? puzzle.match.score.home : puzzle.match.score.away;
-  const homeScoreOk: boolean | null = revealed ? parseInt(guess.homeScore) === expectedHome : null;
-  const awayScoreOk: boolean | null = revealed ? parseInt(guess.awayScore) === expectedAway : null;
+  const homeScoreOk: boolean | "partial" | null = revealed
+    ? (parseInt(guess.homeScore) === expectedHome ? (teamsSwapped ? "partial" : true) : false)
+    : null;
+  const awayScoreOk: boolean | "partial" | null = revealed
+    ? (parseInt(guess.awayScore) === expectedAway ? (teamsSwapped ? "partial" : true) : false)
+    : null;
 
   const compOk: boolean | null = revealed
     ? normaliseCompetition(guess.competition) === normalisedPuzzleCompetition(puzzle.match.competition)
     : null;
 
+  // Stadium: if the guess is a clean subset of the real name → green (full marks).
+  // "Wembley" ⊆ "Wembley Stadium" = correct. Only amber when guess contains
+  // extra words beyond the real name.
   const stadGuess  = norm(guess.stadium);
   const stadAnswer = norm(puzzle.match.stadium);
   const stadOk: boolean | "partial" | null = revealed
-    ? (stadGuess.length < 3 ? false
-      : stadGuess === stadAnswer ? true
-      : (stadAnswer.includes(stadGuess) || stadGuess.includes(stadAnswer)) ? "partial"
+    ? (stadGuess.length < 3          ? false
+      : stadGuess === stadAnswer      ? true
+      : stadAnswer.includes(stadGuess) ? true       // "Wembley" ⊆ "Wembley Stadium" → ✅
+      : stadGuess.includes(stadAnswer) ? "partial"  // guess has extra words → 🤏
       : false)
     : null;
 
