@@ -113,3 +113,57 @@ export function normaliseTeam(raw: string): string {
   const n = norm(raw);
   return TEAM_ALIASES[n] ?? n;
 }
+
+
+// ── Stadium matching ──────────────────────────────────────────────
+// Binary: right or wrong. No partial — fuzzy matching handles abbreviations.
+//
+// Match rules (in order):
+//   1. Exact normalised match
+//   2. Either string is a substring of the other ("Wembley" ⊂ "Wembley Stadium")
+//   3. Canonical alias lookup — handles renamed/nicknamed grounds
+//
+// Add renamed/nicknamed grounds here so both old and new names score correctly.
+
+const STADIUM_ALIASES: Record<string, string> = {
+  // Manchester City — City of Manchester Stadium → Etihad Stadium (2011)
+  "cityofmanchesterstadium": "mancitystadium",
+  "cityofmanchester":        "mancitystadium",
+  "ethiadstadium":           "mancitystadium",
+  "etihad":                  "mancitystadium",
+  "eastlands":               "mancitystadium",
+
+  // Stoke City — Britannia Stadium → bet365 Stadium (2016)
+  "britanniastadium":        "stokestadium",
+  "britannia":               "stokestadium",
+  "bet365stadium":           "stokestadium",
+  "bet365":                  "stokestadium",
+
+  // Tottenham — White Hart Lane → Tottenham Hotspur Stadium (2019)
+  "whitehart":               "spursstadium",
+  "whitehartlane":           "spursstadium",
+  "tottenhamhotspurstadium": "spursstadium",
+  "tottenhamstadium":        "spursstadium",
+
+  // Leicester — Walkers Stadium → King Power Stadium (2011)
+  "walkersstadium":          "lcfcstadium",
+  "kingpowerstadium":        "lcfcstadium",
+  "kingpower":               "lcfcstadium",
+};
+
+export function stadiumMatch(guessRaw: string, actualRaw: string): boolean {
+  const g = norm(guessRaw);
+  const a = norm(actualRaw);
+  if (g.length < 3) return false;
+  // 1. Exact
+  if (g === a) return true;
+  // 2. Substring ("Wembley" ⊂ "Wembley Stadium", "Azteca" ⊂ "Estadio Azteca")
+  if (a.includes(g) || g.includes(a)) return true;
+  // 3. Canonical alias — maps renamed grounds to same key
+  const gC = STADIUM_ALIASES[g] ?? g;
+  const aC = STADIUM_ALIASES[a] ?? a;
+  if (gC === aC) return true;
+  // 4. Cross-check canonical vs raw (e.g. alias resolves to a common substring)
+  if (a.includes(gC) || aC.includes(g)) return true;
+  return false;
+}

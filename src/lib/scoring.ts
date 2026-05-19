@@ -1,5 +1,5 @@
 import { Puzzle, GuessState, ScoreBreakdown } from "@/types/puzzle";
-import { norm, normaliseCompetition, normalisedPuzzleCompetition, normaliseTeam, scorerNamesMatch } from "./aliases";
+import { normaliseCompetition, normalisedPuzzleCompetition, normaliseTeam, scorerNamesMatch, stadiumMatch } from "./aliases";
 
 // ── Point caps ────────────────────────────────────────────────────────────────
 // Year:        15 exact | 10 within 1 yr | 5 within 3 yrs | 0 beyond
@@ -50,17 +50,10 @@ export function calculateScore(puzzle: Puzzle, guess: GuessState): ScoreBreakdow
   const compAnswer = normalisedPuzzleCompetition(puzzle.match.competition);
   const competition = (compGuess && compGuess === compAnswer) ? MAX_COMPETITION : 0;
 
-  // ── Stadium ────────────────────────────────────────────────────────────────
-  // Full marks when guess is a clean subset of the real name ("Wembley" for "Wembley Stadium").
-  // Partial (9) when guess contains extra words beyond the real name.
-  const stadGuess  = norm(guess.stadium);
-  const stadAnswer = norm(puzzle.match.stadium);
-  let stadium = 0;
-  if (stadGuess.length >= 3) {
-    if (stadGuess === stadAnswer)             stadium = MAX_STADIUM; // exact
-    else if (stadAnswer.includes(stadGuess)) stadium = MAX_STADIUM; // guess ⊆ real name
-    else if (stadGuess.includes(stadAnswer)) stadium = 9;           // guess has extra words
-  }
+  // ── Stadium — binary right/wrong ──────────────────────────────────────────
+  // Uses stadiumMatch() which handles abbreviations, substrings, and renamed grounds.
+  // No partial credit — either you know the stadium or you don't.
+  const stadium = stadiumMatch(guess.stadium, puzzle.match.stadium) ? MAX_STADIUM : 0;
 
   // ── Score ─────────────────────────────────────────────────────────────────
   // When teams are swapped, the player attributed their scores to the correct

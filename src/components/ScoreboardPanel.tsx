@@ -4,7 +4,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Puzzle, GuessState, GamePhase, ScoreBreakdown } from "@/types/puzzle";
 import { calculateScore, scorerHits } from "@/lib/scoring";
-import { norm, normaliseCompetition, normalisedPuzzleCompetition, normaliseTeam } from "@/lib/aliases";
+import { normaliseCompetition, normalisedPuzzleCompetition, normaliseTeam, stadiumMatch } from "@/lib/aliases";
 import LedInput from "./LedInput";
 import ScoreInput from "./ScoreInput";
 
@@ -88,18 +88,8 @@ export default function ScoreboardPanel({ puzzle, onPhaseChange }: Props) {
     ? normaliseCompetition(guess.competition) === normalisedPuzzleCompetition(puzzle.match.competition)
     : null;
 
-  // Stadium: if the guess is a clean subset of the real name → green (full marks).
-  // "Wembley" ⊆ "Wembley Stadium" = correct. Only amber when guess contains
-  // extra words beyond the real name.
-  const stadGuess  = norm(guess.stadium);
-  const stadAnswer = norm(puzzle.match.stadium);
-  const stadOk: boolean | "partial" | null = revealed
-    ? (stadGuess.length < 3          ? false
-      : stadGuess === stadAnswer      ? true
-      : stadAnswer.includes(stadGuess) ? true       // "Wembley" ⊆ "Wembley Stadium" → ✅
-      : stadGuess.includes(stadAnswer) ? "partial"  // guess has extra words → 🤏
-      : false)
-    : null;
+  // Stadium — binary right/wrong, same stadiumMatch logic as scoring.ts
+  const stadOk: boolean | null = revealed ? stadiumMatch(guess.stadium, puzzle.match.stadium) : null;
 
   // Scorer hit arrays — respect team swap
   const realHomeScorers = puzzle.match.goalScorers.filter(g => g.team === "home");
@@ -388,7 +378,6 @@ function ScoreBar({ pts, max, breakdown, yearDiff }: {
   const notes: string[] = [];
   if (yearDiff > 0 && yearDiff <= 3)   notes.push(`year off by ${yearDiff}`);
   if (breakdown.teamsSwapped)           notes.push("home & away swapped");
-  if (breakdown.stadium === 9)          notes.push("close on stadium");
   if (breakdown.score === 5)            notes.push("one score right");
   if (breakdown.goalScorers > 0 && breakdown.goalScorers < 25)
                                         notes.push("some scorers correct");
