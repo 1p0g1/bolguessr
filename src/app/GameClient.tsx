@@ -56,7 +56,7 @@ export default function GameClient({ puzzle, isDev = false, allDates = [], curre
       {/* ── Dev mode toolbar ───────────────────────────────────────── */}
       {isDev && (
         <div className="flex items-center justify-between px-4 py-1.5 text-[11px] font-led shrink-0"
-          style={{ background: "#1a0a00", borderBottom: "1px solid #ff6600" }}>
+          style={{ background: "#111", borderBottom: "1px solid #c8102e" }}>
           <span style={{ color: "#ff6600" }}>⚙ DEV MODE</span>
           <div className="flex items-center gap-2">
             <button onClick={() => prevDate && navTo(prevDate)} disabled={!prevDate}
@@ -94,7 +94,7 @@ export default function GameClient({ puzzle, isDev = false, allDates = [], curre
       <main className="flex-1 flex flex-col lg:flex-row overflow-hidden" style={{ minHeight: 0 }}>
 
         {/* Image pane */}
-        <div className="relative min-h-[45vh] lg:flex-1 lg:min-h-0 bg-black scanlines overflow-hidden">
+        <div className="relative min-h-[45vh] lg:flex-1 lg:min-h-0 bg-black overflow-hidden">
           {imageError ? (
             <PlaceholderImage puzzleDate={puzzle.puzzleDate} imageFile={puzzle.imageFile} />
           ) : (

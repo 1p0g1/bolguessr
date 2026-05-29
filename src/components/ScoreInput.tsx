@@ -15,7 +15,7 @@ export default function ScoreInput({
 }: ScoreInputProps) {
   const borderColor =
     correct === true      ? "var(--green-led)" :
-    correct === "partial" ? "var(--amber)"     :
+    correct === "partial" ? "#b85c00"          :
     correct === false     ? "var(--red-led)"   :
     "var(--border-dim)";
 
@@ -23,7 +23,7 @@ export default function ScoreInput({
     correct === true      ? "var(--green-led)" :
     correct === "partial" ? "var(--amber)"     :
     correct === false     ? "var(--red-led)"   :
-    "var(--amber)";
+    "var(--white-bright)";
 
   return (
     <div className="flex flex-col items-center gap-1">
